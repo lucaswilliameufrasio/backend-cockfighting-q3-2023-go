@@ -1,0 +1,64 @@
+name: benchmark-gatling
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gatling:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Start benchmark stack
+        run: docker compose -f docker-compose.benchmark.yml up -d
+
+      - name: Wait for stack to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null -w "%{http_code}" "http://localhost:9999/health-check" | grep -q 200; then
+              echo "Stack ready!"
+              exit 0
+            fi
+            echo "waiting... $i"
+            sleep 2
+          done
+          echo "Stack never became ready"
+          docker compose -f docker-compose.benchmark.yml logs --tail 30 api1 api2 lb db
+          exit 1
+
+      - name: Load test (Rinha Gatling)
+        run: |
+          git clone --single-branch --quiet https://github.com/zanfranceschi/rinha-de-backend-2023-q3
+          cd rinha-de-backend-2023-q3
+          wget https://repo1.maven.org/maven2/io/gatling/highcharts/gatling-charts-highcharts-bundle/3.9.5/gatling-charts-highcharts-bundle-3.9.5-bundle.zip
+          unzip gatling-charts-highcharts-bundle-3.9.5-bundle.zip
+          cd gatling-charts-highcharts-bundle-3.9.5
+          ./bin/gatling.sh -rm local -s RinhaBackendSimulation -rd "${{ github.sha }}" -rf $WORKSPACE/user-files/results -sf $WORKSPACE/user-files/simulations -rsf $WORKSPACE/user-files/resources
+          echo GATLING_OUTPUT_FOLDER=$(ls $WORKSPACE/user-files/results | sort | head -n 1) >> $GITHUB_ENV
+        env:
+          WORKSPACE: ${{ github.workspace }}/rinha-de-backend-2023-q3/stress-test
+
+      - name: Diagnostics
+        run: |
+          docker compose -f docker-compose.benchmark.yml ps
+          docker compose -f docker-compose.benchmark.yml logs --tail 20 api1 api2 lb db
+
+      - name: Verify contagem
+        run: curl -v "http://localhost:9999/contagem-pessoas"
+
+      - name: Stop stack
+        run: docker compose -f docker-compose.benchmark.yml down -v
+
+      - name: Deploy results
+        uses: peaceiris/actions-gh-pages@1ef5a1b1df4c63fe21a2242edbee6cac921ece01
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ github.workspace }}/rinha-de-backend-2023-q3/stress-test/user-files/results/${{ env.GATLING_OUTPUT_FOLDER }}
+          destination_dir: ${{ env.GATLING_OUTPUT_FOLDER }}
+  
+      - name: Summary
+        run: |
+          REPO_NAME=$(echo ${{ github.repository }} | cut -d '/' -f 2)
+          echo "[Resultados](https://${{ github.repository_owner }}.github.io/${REPO_NAME}/${{ env.GATLING_OUTPUT_FOLDER }})" >> "${GITHUB_STEP_SUMMARY}"

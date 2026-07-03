@@ -1,0 +1,126 @@
+services:
+  db:
+    image: postgres:18.3-alpine
+    hostname: db
+    container_name: backend-cockfighting-database
+    environment:
+      - POSTGRES_PASSWORD=fight
+      - POSTGRES_DB=fight
+    command: [
+      "postgres",
+      "-c", "max_connections=200",
+      "-c", "shared_buffers=450MB",
+      "-c", "work_mem=1536kB",
+      "-c", "maintenance_work_mem=115200kB",
+      "-c", "effective_cache_size=1350MB",
+      "-c", "wal_buffers=13824kB",
+      "-c", "checkpoint_timeout=10min",
+      "-c", "checkpoint_completion_target=0.9",
+      "-c", "random_page_cost=1.1",
+      "-c", "effective_io_concurrency=200",
+      "-c", "autovacuum=on",
+      "-c", "log_statement=none",
+      "-c", "fsync=off",
+      "-c", "synchronous_commit=off",
+      "-c", "full_page_writes=off"
+    ]
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fight"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fight-pit
+    deploy:
+      resources:
+        limits:
+          cpus: '0.85'
+          memory: '1.8GB'
+
+  api1:
+    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-go:latest
+    hostname: api1
+    restart: on-failure
+    environment:
+      - PORT=8080
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=fight
+      - DB_USER=postgres
+      - DB_PASSWORD=fight
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health-check"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+    networks:
+      - fight-pit
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '0.4GB'
+
+  api2:
+    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-go:latest
+    hostname: api2
+    restart: on-failure
+    environment:
+      - PORT=8081
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=fight
+      - DB_USER=postgres
+      - DB_PASSWORD=fight
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health-check"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+    networks:
+      - fight-pit
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: '0.4GB'
+
+  lb:
+    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-lb:fec5b5e187a2bb275533bc521bfa0564fca564dd
+    hostname: lb
+    restart: unless-stopped
+    environment:
+      - LISTEN=0.0.0.0:9999
+      - UPSTREAMS=api1:8080,api2:8081
+    ports:
+      - "9999:9999"
+    depends_on:
+      api1:
+        condition: service_healthy
+      api2:
+        condition: service_healthy
+    networks:
+      - fight-pit
+    deploy:
+      resources:
+        limits:
+          cpus: '0.15'
+          memory: '0.4GB'
+
+networks:
+  fight-pit:
+    driver: bridge
+
+volumes:
+  postgres_data:

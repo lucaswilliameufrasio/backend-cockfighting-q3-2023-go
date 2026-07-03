@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:18.3-alpine
+    environment:
+      POSTGRES_DB: fight
+      POSTGRES_PASSWORD: fight
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fight"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  api:
+    build: .
+    environment:
+      PORT: "8080"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: fight
+      DB_USER: postgres
+      DB_PASSWORD: fight
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
