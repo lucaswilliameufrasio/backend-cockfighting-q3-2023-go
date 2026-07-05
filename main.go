@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,11 +20,11 @@ import (
 // ---------------------------------------------------------------------------
 
 type Person struct {
-	ID        string   `json:"id"`
-	Apelido   string   `json:"apelido"`
-	Nome      string   `json:"nome"`
-	Nascimento string  `json:"nascimento"`
-	Stack     []string `json:"stack,omitempty"`
+	ID         string    `json:"id"`
+	Apelido    string    `json:"apelido"`
+	Nome       string    `json:"nome"`
+	Nascimento string    `json:"nascimento"`
+	Stack      *[]string `json:"stack"`
 }
 
 type CreatePersonRequest struct {
@@ -173,6 +174,9 @@ func (s *Server) getPersonByID(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, nickname, name, birth_date::text, COALESCE(stack, '{}') FROM people WHERE id = $1`,
 		id,
 	).Scan(&p.ID, &p.Apelido, &p.Nome, &p.Nascimento, &p.Stack)
+	if p.Stack != nil && len(*p.Stack) == 0 {
+		p.Stack = nil
+	}
 
 	if err != nil {
 		if err.Error() == "no rows in result set" {
@@ -217,6 +221,9 @@ func (s *Server) searchPeople(w http.ResponseWriter, r *http.Request) {
 			log.Printf("scan error: %v", err)
 			continue
 		}
+		if p.Stack != nil && len(*p.Stack) == 0 {
+			p.Stack = nil
+		}
 		people = append(people, p)
 	}
 
@@ -235,7 +242,9 @@ func (s *Server) countPeople(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]int{"count": count})
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(strconv.Itoa(count)))
 }
 
 // ---------------------------------------------------------------------------
