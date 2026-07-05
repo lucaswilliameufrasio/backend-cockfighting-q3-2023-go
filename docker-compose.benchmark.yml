@@ -41,7 +41,7 @@ services:
           memory: '1.8GB'
 
   api1:
-    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-go:latest
+    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-go:9679f9770276e16827e76703fe4a3b4ab910bc66
     hostname: api1
     restart: on-failure
     environment:
@@ -69,7 +69,7 @@ services:
           memory: '0.4GB'
 
   api2:
-    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-go:latest
+    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-go:9679f9770276e16827e76703fe4a3b4ab910bc66
     hostname: api2
     restart: on-failure
     environment:
@@ -97,7 +97,7 @@ services:
           memory: '0.4GB'
 
   lb:
-    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-lb:fec5b5e187a2bb275533bc521bfa0564fca564dd
+    image: ghcr.io/lucaswilliameufrasio/backend-cockfighting-q3-2023-lb:62e0f7b25bf8325d7acacf470f269cd15570dd7d
     hostname: lb
     restart: unless-stopped
     environment:
