@@ -1,0 +1,27 @@
+name: benchmark-contract-ko
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  contract-ko:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - run: docker compose -f docker-compose.test.yml up -d
+      - name: Wait
+        run: |
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/health-check" | grep -q 200 && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Install k6
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gnupg
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq k6
+      - run: BASE_URL=http://localhost:8080 k6 run benchmarks/contract-ko.js
+      - run: docker compose -f docker-compose.test.yml down -v

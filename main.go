@@ -28,10 +28,10 @@ type Person struct {
 }
 
 type CreatePersonRequest struct {
-	Apelido   string   `json:"apelido"`
-	Nome      string   `json:"nome"`
-	Nascimento string  `json:"nascimento"`
-	Stack     []string `json:"stack,omitempty"`
+	Apelido    string   `json:"apelido"`
+	Nome       string   `json:"nome"`
+	Nascimento string   `json:"nascimento"`
+	Stack      []string `json:"stack,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
