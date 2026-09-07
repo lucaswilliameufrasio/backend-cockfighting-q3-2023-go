@@ -1,8 +1,17 @@
-# Validação no host host-b-fordring (set/2026, rodada 2)
+# Validação no host-b (set/2026, rodada 2)
 
-Ambiente controlado no lugar do EC2: i5-8265U 4c/8t @ 1.6-3.9GHz, 15GB RAM, docker rootless
-(gvisor-tap-vsock). Mesmas quotas do compose (0.25/0.15/0.85 CPU = 1.5 total). k6 via container
-`grafana/k6` **dentro da rede do stack** (`BASE_URL=http://nginx:9999`). DB fresh por suíte.
+Dois hosts de comparação (identificados por configuração, não por nome):
+
+| | host-a | host-b |
+|---|---|---|
+| CPU | Ryzen 9 7900 (12C/24T, Zen4, boost ~5.4GHz) | i5-8265U (4C/8T, 1.6-3.9GHz) |
+| RAM | sobrada p/ o stack | 15GB |
+| Docker | nativo (kernel) | rootless (gvisor-tap-vsock) |
+| Papel | comparação relativa rápida | aproxima condição "EC2-like" da Rinha (CPU apertada) |
+
+Ambos: mesmas quotas do compose (0.25/0.15/0.85 CPU = 1.5 total). No host-b o k6 roda via
+container `grafana/k6` **dentro da rede do stack** (`BASE_URL=http://nginx:9999`) — o rootless
+com `--disable-host-loopback` não expõe portas publicadas ao `--network host`. DB fresh por suíte.
 
 Config da rodada 2 nos 3 repos: nginx **L4 (`stream`)** + GIN **`fastupdate=off`** + pool 16.
 Branches `feature/upgrade-benchmark`; imagem C++ buildada com `-march=x86-64-v3`.
@@ -37,7 +46,7 @@ catastrófico de pending list (p95 7.4s medido no host-a). Rinha pontua p99 — 
 - p99 de mixed (5-6s) = checkpoint/vacuum do postgres sob 0.85 CPU — igual nos 3 repos
 
 ## Notas de infra do host-b (para futuras validações)
-- **`loginctl enable-linger eufrasio` aplicado**: sem linger, o user manager systemd morria
+- **`loginctl enable-linger` aplicado no usuário do docker rootless**: sem linger, o user manager systemd morria
   10s após a última sessão ssh (`UserStopDelaySec=10`) e derrubava o daemon docker rootless
   com SIGTERM em massa — toda sessão ssh que terminava matava os containers
 - Docker rootless (gvisor-tap-vsock): `--network host` no k6 NÃO alcança portas publicadas
