@@ -17,7 +17,12 @@ import (
 // Shared compose stack — sobe uma vez para todos os testes (padrão do Rust)
 // ---------------------------------------------------------------------------
 
-const baseURL = "http://localhost:8080"
+var baseURL = func() string {
+	if p := os.Getenv("TEST_API_PORT"); p != "" {
+		return "http://localhost:" + p
+	}
+	return "http://localhost:8080"
+}()
 
 var composeReady = false
 
