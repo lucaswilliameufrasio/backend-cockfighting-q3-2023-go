@@ -1,6 +1,6 @@
 module github.com/lucaswilliameufrasio/backend-cockfighting-q3-2023-go
 
-go 1.26
+go 1.27
 
 require (
 	github.com/google/uuid v1.6.0

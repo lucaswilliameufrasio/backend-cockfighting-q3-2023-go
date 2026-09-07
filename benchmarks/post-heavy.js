@@ -14,7 +14,7 @@ export const options = {
   },
 };
 
-const BASE = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE = __ENV.BASE_URL || 'http://localhost:9999';
 
 function nick() {
   return `u${__VU}${__ITER}${Date.now()}`.slice(0, 32);
@@ -24,9 +24,9 @@ export default function () {
   const apelido = nick();
   const payload = JSON.stringify({
     apelido,
-    nome: 'Test',
+    nome: 'Post Heavy',
     nascimento: '1990-01-01',
-    stack: ['go'],
+    stack: ['cpp'],
   });
 
   const create = http.post(`${BASE}/pessoas`, payload, {
@@ -44,9 +44,6 @@ export default function () {
     const get = http.get(`${BASE}/pessoas/${id}`, { tags: { name: 'get-person' } });
     check(get, { 'get 200': (r) => r.status === 200 });
   }
-
-  const search = http.get(`${BASE}/pessoas?t=${apelido.slice(0, 8)}`, { tags: { name: 'search-person' } });
-  check(search, { 'search 200': (r) => r.status === 200 });
 
   if (__ITER % 20 === 0) {
     const count = http.get(`${BASE}/contagem-pessoas`, { tags: { name: 'count-person' } });

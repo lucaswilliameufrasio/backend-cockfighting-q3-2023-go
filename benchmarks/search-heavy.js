@@ -19,7 +19,7 @@ export function setup() {
       apelido,
       nome: `Search User ${i}`,
       nascimento: '1990-01-01',
-      stack: ['go', 'postgres', `tag${i}`],
+      stack: ['node', 'postgres', `tag${i}`],
     });
     http.post(`${BASE}/pessoas`, payload, {
       headers: { 'Content-Type': 'application/json' },

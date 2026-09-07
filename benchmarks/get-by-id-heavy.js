@@ -18,7 +18,7 @@ export function setup() {
       apelido: `id${i}_${Date.now()}`.slice(0, 32),
       nome: `GetById ${i}`,
       nascimento: '1990-01-01',
-      stack: ['go'],
+      stack: ['id'],
     });
     const resp = http.post(`${BASE}/pessoas`, payload, {
       headers: { 'Content-Type': 'application/json' },
