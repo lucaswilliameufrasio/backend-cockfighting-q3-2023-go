@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,9 +41,17 @@ type CreatePersonRequest struct {
 // ---------------------------------------------------------------------------
 
 func jsonResponse(w http.ResponseWriter, status int, data any) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"message":"marshal error"}`))
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	w.Write(body)
 }
 
 func errorResponse(w http.ResponseWriter, status int, msg string) {
@@ -52,10 +62,14 @@ func isDateValid(date string) bool {
 	if len(date) != 10 || date[4] != '-' || date[7] != '-' {
 		return false
 	}
-	y, m, d := 0, 0, 0
-	if _, err := fmt.Sscanf(date, "%d-%d-%d", &y, &m, &d); err != nil {
-		return false
+	for _, i := range [8]int{0, 1, 2, 3, 5, 6, 8, 9} {
+		if date[i] < '0' || date[i] > '9' {
+			return false
+		}
 	}
+	y := int(date[0]-'0')*1000 + int(date[1]-'0')*100 + int(date[2]-'0')*10 + int(date[3]-'0')
+	m := int(date[5]-'0')*10 + int(date[6]-'0')
+	d := int(date[8]-'0')*10 + int(date[9]-'0')
 	if y < 1800 || y > 9999 || m < 1 || m > 12 || d < 1 || d > 31 {
 		return false
 	}
@@ -72,16 +86,7 @@ func isDateValid(date string) bool {
 	return true
 }
 
-func toPGArray(v []string) string {
-	if len(v) == 0 {
-		return "{}"
-	}
-	parts := make([]string, len(v))
-	for i, s := range v {
-		parts[i] = `"` + s + `"`
-	}
-	return "{" + strings.Join(parts, ",") + "}"
-}
+
 
 // ---------------------------------------------------------------------------
 // Server
@@ -131,7 +136,10 @@ func (s *Server) createPerson(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := uuid.Must(uuid.NewV7()).String()
-	stackStr := toPGArray(req.Stack)
+	stack := req.Stack
+	if stack == nil {
+		stack = []string{}
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -139,14 +147,14 @@ func (s *Server) createPerson(w http.ResponseWriter, r *http.Request) {
 	var insertedID string
 	err := s.db.QueryRow(ctx,
 		`INSERT INTO people (id, nickname, name, birth_date, stack)
-		 VALUES ($1, $2, $3, TO_DATE($4, 'YYYY-MM-DD'), $5::varchar[])
+		 VALUES ($1, $2, $3, TO_DATE($4, 'YYYY-MM-DD'), $5)
 		 ON CONFLICT (nickname) DO NOTHING
 		 RETURNING id`,
-		id, req.Apelido, req.Nome, req.Nascimento, stackStr,
+		id, req.Apelido, req.Nome, req.Nascimento, stack,
 	).Scan(&insertedID)
 
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			errorResponse(w, http.StatusUnprocessableEntity, "Conflict")
 			return
 		}
@@ -179,7 +187,7 @@ func (s *Server) getPersonByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			errorResponse(w, http.StatusNotFound, "Not found")
 			return
 		}
@@ -266,7 +274,15 @@ func main() {
 		getEnv("DB_NAME", "fight"),
 	)
 
-	pool, err := pgxpool.New(context.Background(), dsn)
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		log.Fatalf("failed to parse pool config: %v", err)
+	}
+	if maxConns := getEnvInt("DB_MAX_CONNECTIONS", 0); maxConns > 0 {
+		poolCfg.MaxConns = int32(maxConns)
+	}
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
 		log.Fatalf("failed to create pool: %v", err)
 	}
@@ -282,13 +298,30 @@ func main() {
 	mux.HandleFunc("GET /contagem-pessoas", s.countPeople)
 
 	addr := "0.0.0.0:" + port
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       65 * time.Second,
+	}
 	log.Printf("Listening on http://%s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(srv.ListenAndServe())
 }
 
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return fallback
 }
